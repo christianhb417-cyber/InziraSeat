@@ -1,0 +1,179 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the application.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user's unique ID from Firebase Auth." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "photoURL": { "type": "string", "format": "uri", "description": "URL of the user's profile picture." },
+        "role": { "type": "string", "enum": ["client", "company", "superadmin"], "description": "The role of the user." },
+        "companyId": { "type": "string", "description": "The ID of the company the user belongs to, if applicable." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of when the user was created." }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Represents a bus company.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string", "description": "Unique ID for the company." },
+        "name": { "type": "string", "description": "Name of the company." },
+        "contactEmail": { "type": "string", "format": "email", "description": "Contact email for the company." },
+        "contactPhone": { "type": "string", "description": "Contact phone for the company." },
+        "address": { "type": "string", "description": "Physical address of the company." },
+        "ownerUid": { "type": "string", "description": "The UID of the user who owns this company." },
+        "status": { "type": "string", "enum": ["pending", "active", "suspended", "rejected"], "description": "The status of the company's registration." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "name", "contactEmail", "ownerUid", "status", "createdAt"]
+    },
+    "Bus": {
+      "title": "Bus",
+      "description": "Represents a single bus belonging to a company.",
+      "type": "object",
+      "properties": {
+        "busId": { "type": "string" },
+        "companyId": { "type": "string", "$ref": "#/entities/Company" },
+        "plateNumber": { "type": "string" },
+        "capacity": { "type": "number" },
+        "driverId": { "type": "string", "description": "The ID of the assigned driver." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["busId", "companyId", "plateNumber", "capacity"]
+    },
+    "Trip": {
+      "title": "Trip",
+      "description": "Represents a scheduled trip.",
+      "type": "object",
+      "properties": {
+        "tripId": { "type": "string" },
+        "companyId": { "type": "string", "$ref": "#/entities/Company" },
+        "busId": { "type": "string", "$ref": "#/entities/Bus" },
+        "origin": { "type": "string" },
+        "destination": { "type": "string" },
+        "departureTime": { "type": "string", "format": "date-time" },
+        "arrivalTime": { "type": "string", "format": "date-time" },
+        "price": { "type": "number" },
+        "seatsAvailable": { "type": "number" },
+        "status": { "type": "string", "enum": ["scheduled", "departed", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tripId", "companyId", "busId", "origin", "destination", "departureTime", "price", "seatsAvailable", "status"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Represents a seat booking made by a client.",
+      "type": "object-gcs",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "userId": { "type": "string", "$ref": "#/entities/User" },
+        "tripId": { "type": "string", "$ref": "#/entities/Trip" },
+        "companyId": { "type": "string", "$ref": "#/entities/Company" },
+        "seats": { "type": "array", "items": { "type": "number" } },
+        "totalPrice": { "type": "number" },
+        "paymentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending_payment", "confirmed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "userId", "tripId", "companyId", "seats", "totalPrice", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Represents a payment transaction.",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string" },
+        "bookingId": { "type": "string", "$ref": "#/entities/Booking" },
+        "userId": { "type": "string", "$ref": "#/entities/User" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "default": "RWF" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed", "refunded"] },
+        "method": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["paymentId", "bookingId", "userId", "amount", "status"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Represents an email subscription.",
+      "type": "object",
+      "properties": {
+          "email": { "type": "string", "format": "email" },
+          "subscribedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "subscribedAt"]
+    },
+    "AuditLog": {
+        "title": "Audit Log",
+        "description": "Logs significant actions within the system.",
+        "type": "object",
+        "properties": {
+            "logId": { "type": "string" },
+            "actorUid": { "type": "string" },
+            "action": { "type": "string" },
+            "targetType": { "type": "string" },
+            "targetId": { "type": "string" },
+            "timestamp": { "type": "string", "format": "date-time" },
+            "details": { "type": "object" }
+        },
+        "required": ["logId", "actorUid", "action", "timestamp"]
+    },
+    "SystemSettings": {
+      "title": "System Settings",
+      "description": "Global configuration for the application.",
+      "type": "object",
+      "properties": {
+        "commissionRate": { "type": "number" },
+        "maintenanceMode": { "type": "boolean" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["password", "google.com"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores public profiles for all users."
+    },
+    "/companies/{companyId}": {
+      "schema": { "$ref": "#/entities/Company" },
+      "description": "Stores information about registered bus companies."
+    },
+    "/companies/{companyId}/buses/{busId}": {
+      "schema": { "$ref": "#/entities/Bus" },
+      "description": "Sub-collection for buses belonging to a specific company."
+    },
+    "/trips/{tripId}": {
+      "schema": { "$ref": "#/entities/Trip" },
+      "description": "Stores all available trips from all companies."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Stores all booking records."
+    },
+    "/payments/{paymentId}": {
+        "schema": { "$ref": "#/entities/Payment" },
+        "description": "Stores all payment transaction records."
+    },
+    "/subscriptions/{emailId}": {
+        "schema": { "$ref": "#/entities/Subscription" },
+        "description": "Stores email addresses for newsletter subscriptions."
+    },
+    "/auditLogs/{logId}": {
+        "schema": { "$ref": "#/entities/AuditLog" },
+        "description": "Stores audit logs for important system events. Write-only for functions."
+    },
+    "/settings/system": {
+        "schema": { "$ref": "#/entities/SystemSettings" },
+        "description": "Single document for system-wide configuration."
+    }
+  }
+}
