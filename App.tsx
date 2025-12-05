@@ -13,7 +13,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { QrReader } from 'react-qr-reader';
 
 import { AppState, Booking, Bus as BusType, Route, SeatLock, User, Staff, MaintenanceLog, BookingStatus, AuditLog, Company, UserRole } from './types';
-import { CITIES, CITY_COORDINATES, MOCK_ROUTES } from './constants';
+import { CITIES, CITY_COORDINATES } from './constants';
 import { Button } from './components/Button';
 import { Input } from './components/Input';
 import { AIAssistant } from './components/AIAssistant';
@@ -127,7 +127,7 @@ const Sidebar = ({ user, activeView, setView, onLogout, isMobileOpen, setIsMobil
 };
 
 // 2. Mission Control Dashboard (Company Admin)
-const MissionControl = ({ buses, staff, maintenance }: { buses: BusType[], staff: Staff[], maintenance: MaintenanceLog[] }) => {
+const MissionControl = ({ buses, staff, maintenance, bookings }: { buses: BusType[], staff: Staff[], maintenance: MaintenanceLog[], bookings: Booking[] }) => {
   const [reportLoading, setReportLoading] = useState(false);
   
   const handleReport = () => {
@@ -137,6 +137,14 @@ const MissionControl = ({ buses, staff, maintenance }: { buses: BusType[], staff
         alert("Daily fleet report generated and sent to your email.");
     }, 2000);
   };
+
+  // Calculate Real Stats
+  const revenueToday = bookings
+    .filter(b => {
+        const today = new Date().toISOString().split('T')[0];
+        return b.createdAt.startsWith(today) && b.paymentStatus === 'paid';
+    })
+    .reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -164,7 +172,7 @@ const MissionControl = ({ buses, staff, maintenance }: { buses: BusType[], staff
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
          {[
            { label: 'Active Fleet', value: buses.filter(b => b.status === 'active' || b.status === 'departed').length, total: buses.length, color: 'text-primary', bg: 'bg-primary/10' },
-           { label: 'Revenue Today', value: '1.2M', unit: 'RWF', color: 'text-secondary', bg: 'bg-secondary/10' },
+           { label: 'Revenue Today', value: formatRWF(revenueToday), unit: '', color: 'text-secondary', bg: 'bg-secondary/10' },
            { label: 'Staff on Duty', value: staff.filter(s => s.status === 'on_duty').length, total: staff.length, color: 'text-accent', bg: 'bg-accent/10' },
            { label: 'Critical Issues', value: maintenance.filter(m => m.status === 'in_progress').length, color: 'text-danger', bg: 'bg-danger/10' },
          ].map((stat, i) => (
@@ -189,7 +197,17 @@ const MissionControl = ({ buses, staff, maintenance }: { buses: BusType[], staff
 };
 
 // 3. System Overwatch (System Admin)
-const SystemDashboard = ({ auditLogs, companiesCount }: { auditLogs: AuditLog[], companiesCount: number }) => {
+const SystemDashboard = ({ auditLogs, companiesCount, bookings }: { auditLogs: AuditLog[], companiesCount: number, bookings: Booking[] }) => {
+  
+  const dailyPassengers = bookings.filter(b => {
+      const today = new Date().toISOString().split('T')[0];
+      return b.createdAt.startsWith(today);
+  }).length;
+
+  const totalRevenue = bookings
+    .filter(b => b.paymentStatus === 'paid')
+    .reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-white/5 pb-6">
@@ -221,9 +239,9 @@ const SystemDashboard = ({ auditLogs, companiesCount }: { auditLogs: AuditLog[],
          <div className="glass-panel p-8 rounded-[2.5rem] bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
             <div className="flex justify-between items-start mb-8">
                <div className="p-3 bg-primary/20 rounded-2xl text-primary"><Users size={24} /></div>
-               <span className="text-xs font-bold uppercase bg-white/5 px-2 py-1 rounded text-gray-400">+12% this week</span>
+               <span className="text-xs font-bold uppercase bg-white/5 px-2 py-1 rounded text-gray-400">Today</span>
             </div>
-            <h3 className="text-4xl font-display font-bold text-white mb-1">2,450</h3>
+            <h3 className="text-4xl font-display font-bold text-white mb-1">{dailyPassengers}</h3>
             <p className="text-gray-400 font-medium">Daily Passengers</p>
          </div>
 
@@ -232,8 +250,8 @@ const SystemDashboard = ({ auditLogs, companiesCount }: { auditLogs: AuditLog[],
                <div className="p-3 bg-accent/20 rounded-2xl text-accent"><CircleDollarSign size={24} /></div>
                <span className="text-xs font-bold uppercase bg-white/5 px-2 py-1 rounded text-gray-400">Net Revenue</span>
             </div>
-            <h3 className="text-4xl font-display font-bold text-white mb-1">15.2M</h3>
-            <p className="text-gray-400 font-medium">Platform Total (RWF)</p>
+            <h3 className="text-4xl font-display font-bold text-white mb-1">{formatRWF(totalRevenue)}</h3>
+            <p className="text-gray-400 font-medium">Platform Total</p>
          </div>
       </div>
     </div>
@@ -348,7 +366,12 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {companies.map(company => (
+        {companies.length === 0 ? (
+            <div className="col-span-full py-20 text-center text-gray-500 border border-dashed border-white/10 rounded-3xl">
+                <Globe size={48} className="mx-auto mb-4 opacity-50" />
+                <p>No companies registered. Add the first operator.</p>
+            </div>
+        ) : companies.map(company => (
            <div key={company.companyId} className="glass-panel p-6 rounded-3xl group border border-white/5 hover:border-primary/30 transition-all flex flex-col h-full">
               <div className="flex justify-between items-start mb-6">
                  <div className="flex items-center gap-3">
@@ -383,9 +406,10 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
 };
 
 // 3.2 Global Analytics Module
-const GlobalAnalytics = () => {
-    // Mock Chart Data for CSS Viz
-    const revenueData = [40, 65, 55, 80, 75, 90, 85];
+const GlobalAnalytics = ({ bookings }: { bookings: Booking[] }) => {
+    // Calculate dynamic stats
+    const totalBookings = bookings.length;
+    const pendingBookings = bookings.filter(b => b.status === 'pending_payment').length;
     
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -397,27 +421,24 @@ const GlobalAnalytics = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Revenue Chart */}
                 <div className="glass-panel p-8 rounded-[2.5rem] border border-white/5">
                     <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
-                        <BarChart3 className="text-primary" /> Revenue Growth
+                        <BarChart3 className="text-primary" /> Booking Distribution
                     </h3>
-                    <div className="h-64 flex items-end justify-between gap-4 px-2">
-                        {revenueData.map((h, i) => (
-                            <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                                <div className="text-xs text-primary font-bold opacity-0 group-hover:opacity-100 transition-opacity mb-1">
-                                    {h}M
-                                </div>
-                                <div 
-                                    className="w-full bg-gradient-to-t from-primary/10 to-primary/50 rounded-t-xl transition-all duration-500 group-hover:to-primary"
-                                    style={{ height: `${h}%` }}
-                                ></div>
-                                <div className="text-xs text-gray-500 font-mono">
-                                    {['M','T','W','T','F','S','S'][i]}
-                                </div>
+                    {totalBookings === 0 ? (
+                        <p className="text-gray-500 text-center py-10">No data available for analysis.</p>
+                    ) : (
+                         <div className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                                <span>Completed</span>
+                                <span>{bookings.filter(b => b.status === 'active' || b.status === 'boarded').length}</span>
                             </div>
-                        ))}
-                    </div>
+                            <div className="flex justify-between text-sm">
+                                <span>Pending</span>
+                                <span>{pendingBookings}</span>
+                            </div>
+                         </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -877,8 +898,8 @@ const WalletView = ({ user, buses, routes }: { user: User, buses: BusType[], rou
      fetchBookings();
    }, [user.userId]);
 
-   // Merge real routes with mocks if fetching from DB isn't fully ready or for hybrid display
-   const allRoutes = [...MOCK_ROUTES, ...routes];
+   // Use only real routes
+   const allRoutes = routes;
    
    return (
       <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
@@ -900,10 +921,11 @@ const WalletView = ({ user, buses, routes }: { user: User, buses: BusType[], rou
          ) : (
              <div className="space-y-6">
                 {bookings.length > 0 ? bookings.map(booking => {
-                // Try to find route details in loaded routes or fallback to mocks (simplified for demo)
-                const route = allRoutes.find(r => r.routeId === booking.routeId) || MOCK_ROUTES[0];
+                const route = allRoutes.find(r => r.routeId === booking.routeId);
                 const bus = buses.find(b => b.busId === booking.busId);
                 
+                if (!route) return null; // Skip if route data missing (e.g., deleted)
+
                 const isTracking = trackingBusId === bus?.busId;
 
                 return (
@@ -1015,10 +1037,9 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
   const [paymentMethod, setPaymentMethod] = useState<'momo' | 'airtel'>('momo');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const availableRoutes = routes.length > 0 ? routes : [];
-
+  // Filter routes based on available database entries
   const handleSearch = () => {
-     const results = availableRoutes.filter(r => 
+     const results = routes.filter(r => 
         (from ? r.from === from : true) && 
         (to ? r.to === to : true)
      );
@@ -1027,6 +1048,7 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
   };
 
   const handleSeatSelect = (seat: number) => {
+     // Check if seat is booked (Optional: Add real check here against bookings table)
      setSelectedSeat(seat === selectedSeat ? null : seat);
   };
 
@@ -1075,7 +1097,7 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
       return (
         <div className="pb-20 space-y-12 animate-in fade-in duration-500">
           <div className="relative rounded-[3rem] overflow-hidden min-h-[500px] flex flex-col items-center justify-center text-center p-6 border border-white/10 bg-black">
-             {/* Gradient Background instead of Image */}
+             {/* Gradient Background */}
              <div className="absolute inset-0 bg-gradient-to-br from-[#0f1016] via-[#050508] to-black"></div>
              {/* Cyber Grid Pattern */}
              <div className="absolute inset-0 grid-bg opacity-30"></div>
@@ -1121,7 +1143,7 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
              </div>
           </div>
           
-          {/* Featured Destinations (3D Tilt Cards) - NO IMAGES */}
+          {/* Featured Destinations (3D Tilt Cards) */}
           <div className="max-w-7xl mx-auto px-4">
              <h2 className="text-2xl font-bold mb-8">Trending Destinations</h2>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -1218,7 +1240,8 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
                   <div className="grid grid-cols-4 gap-4 max-w-sm mx-auto">
                       {Array.from({ length: 32 }).map((_, i) => {
                           const seatNum = i + 1;
-                          const isBooked = [2, 5, 8, 12, 15].includes(seatNum); // Mock booked visual for now
+                          // In a real app, check against bookings for this route/date
+                          const isBooked = false; 
                           const isSelected = selectedSeat === seatNum;
                           
                           return (
@@ -1311,65 +1334,14 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
   return null;
 };
 
-// 8. Scanner View (Company Admin)
-const ScannerView = ({ onScan }: { onScan: (data: string | null) => void }) => {
-  const [lastResult, setLastResult] = useState<string | null>(null);
-  
-  const handleScan = (result: any) => {
-    if (result) {
-      setLastResult(result?.text);
-      onScan(result?.text);
-    }
-  };
-
-  return (
-    <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div className="text-center">
-        <h1 className="text-3xl font-display font-bold mb-2">Ticket Scanner</h1>
-        <p className="text-gray-400">Position the QR code within the frame to verify.</p>
-      </div>
-      
-      <div className="glass-panel p-4 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative">
-        <QrReader
-          onResult={handleScan}
-          constraints={{ facingMode: 'environment' }}
-          className="w-full h-full rounded-2xl overflow-hidden"
-          containerStyle={{ borderRadius: '1rem', overflow: 'hidden' }}
-        />
-        
-        {/* Overlay Graphic */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-           <div className="w-64 h-64 border-2 border-primary/50 rounded-2xl relative">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary -mt-1 -ml-1"></div>
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary -mt-1 -mr-1"></div>
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary -mb-1 -ml-1"></div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary -mb-1 -mr-1"></div>
-              <div className="absolute inset-0 bg-primary/5 animate-pulse"></div>
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-primary/50 shadow-[0_0_10px_rgba(0,220,130,0.8)] animate-float"></div>
-           </div>
-        </div>
-      </div>
-
-      {lastResult && (
-         <div className="bg-surfaceHighlight p-4 rounded-xl text-center animate-in slide-in-from-bottom-2">
-            <p className="text-xs text-gray-500 uppercase font-bold">Last Scanned</p>
-            <p className="font-mono text-primary truncate">{lastResult}</p>
-         </div>
-      )}
-    </div>
-  );
-};
-
-// 9. Auth Screen - UPDATED for Real Auth
-const AuthScreen = ({ onLogin }: any) => {
-  const [selectedRole, setSelectedRole] = useState<UserRole>('passenger');
-  const [isSignUp, setIsSignUp] = useState(false);
-  
+// 8. Auth Screen
+const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
+  const [activeTab, setActiveTab] = useState<'passenger' | 'company' | 'admin'>('passenger');
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -1379,207 +1351,243 @@ const AuthScreen = ({ onLogin }: any) => {
     setError('');
 
     try {
-        if (isSignUp && selectedRole !== 'passenger') {
-            throw new Error("Registration is restricted. Only System Administrators can create Company or Admin accounts.");
+      if (isLogin) {
+        // LOGIN FLOW
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        // Check Role
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('role')
+            .eq('userId', data.user.id)
+            .single();
+
+        if (userError) throw userError;
+
+        // Strict Role Enforcement
+        if (activeTab === 'admin' && userData.role !== 'systemAdmin') {
+            throw new Error("Access Denied: This portal is for System Administrators only.");
+        }
+        if (activeTab === 'company' && userData.role !== 'companyAdmin') {
+            throw new Error("Access Denied: Please use the Passenger portal or contact support.");
+        }
+        if (activeTab === 'passenger' && userData.role !== 'passenger') {
+             // Optional: Allow admins to login as passenger, but usually separate is better
         }
 
-        let authResult;
-        if (isSignUp) {
-            // Sign Up
-            authResult = await supabase.auth.signUp({ 
-                email, 
-                password,
-                options: { data: { role: 'passenger', full_name: fullName } }
-            });
+        if (data.user) onLogin(data.user);
 
-            if (authResult.error) throw authResult.error;
-            
-            // Immediately update the user profile with phone
-            if (authResult.data.user) {
-                await supabase.from('users').update({ 
-                    phone: phone, 
-                    fullName: fullName 
-                }).eq('userId', authResult.data.user.id);
-            }
-
-        } else {
-            // Sign In
-            authResult = await supabase.auth.signInWithPassword({ email, password });
+      } else {
+        // SIGN UP FLOW (Passenger Only)
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { fullName, role: 'passenger' },
+          },
+        });
+        if (error) throw error;
+        if (data.user) {
+             const { error: dbError } = await supabase.from('users').insert({
+                 userId: data.user.id,
+                 email: data.user.email,
+                 fullName: fullName,
+                 role: 'passenger',
+                 phone: phone
+             });
+             if (dbError) throw dbError;
+             onLogin(data.user);
         }
-
-        if (authResult.error) throw authResult.error;
-
-        if (authResult.data.user) {
-            // Check real role in database
-            const { data: profile } = await supabase
-                .from('users')
-                .select('role')
-                .eq('userId', authResult.data.user.id)
-                .single();
-            
-            const dbRole = profile?.role || 'passenger';
-
-            // STRICT ROLE ENFORCEMENT
-            // Ensure the user is logging into the portal that matches their database role exactly.
-            if (selectedRole !== dbRole) {
-                await supabase.auth.signOut();
-                let errorMsg = "Access Denied.";
-                
-                if (dbRole === 'systemAdmin') {
-                    errorMsg = "This is a System Admin account. Please log in via the 'Admin' tab.";
-                } else if (dbRole === 'companyAdmin') {
-                    errorMsg = "This is a Company Admin account. Please log in via the 'Company' tab.";
-                } else {
-                    errorMsg = "This is a Passenger account. Please log in via the 'Passenger' tab.";
-                }
-                
-                throw new Error(errorMsg);
-            }
-
-            onLogin(authResult.data.user);
-        }
+      }
     } catch (err: any) {
-        setError(err.message || "Authentication failed");
-        // Ensure logout on error if a session was created but rejected
-        if (err.message.includes("Access Denied")) {
-             await supabase.auth.signOut();
-        }
+      setError(err.message);
+      await supabase.auth.signOut(); // Ensure clean state on error
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Ambience */}
-      <div className="absolute inset-0 grid-bg opacity-30"></div>
-      <div className={`absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-[120px] animate-blob transition-colors duration-1000 ${selectedRole === 'systemAdmin' ? 'bg-accent/20' : 'bg-primary/20'}`}></div>
-      <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-[120px] animate-blob animation-delay-2000 transition-colors duration-1000 ${selectedRole === 'systemAdmin' ? 'bg-red-500/10' : 'bg-secondary/20'}`}></div>
+    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] animate-blob"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/20 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
+          <div className="absolute inset-0 grid-bg opacity-20"></div>
+      </div>
 
-      <div className="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-        {/* Left Side: Brand */}
-        <div className="hidden lg:block space-y-8">
-           <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-opacity-10 text-sm font-bold uppercase tracking-widest transition-colors ${selectedRole === 'systemAdmin' ? 'border-accent/20 bg-accent/10 text-accent' : 'border-primary/20 bg-primary/10 text-primary'}`}>
-              <Zap size={16} fill="currentColor" /> {selectedRole === 'systemAdmin' ? 'Command Link Established' : 'System Online'}
-           </div>
-           <h1 className="text-7xl font-display font-bold leading-tight">
-              The Future of <span className={`text-transparent bg-clip-text bg-gradient-to-r ${selectedRole === 'systemAdmin' ? 'from-accent to-orange-400' : 'from-primary to-emerald-400'}`}>Mobility.</span>
-           </h1>
-           <p className="text-xl text-gray-400 max-w-md">
-              Seamless booking, real-time fleet intelligence, and AI-powered travel assistance.
-           </p>
-        </div>
+      <div className="w-full max-w-md glass-panel-heavy p-8 rounded-[2.5rem] relative z-10 border border-white/10 shadow-2xl">
+         <div className="text-center mb-8">
+            <div className={`w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-[0_0_30px_rgba(0,0,0,0.5)] transition-all duration-500 ${
+                activeTab === 'admin' ? 'bg-accent text-black shadow-accent/50' : 
+                activeTab === 'company' ? 'bg-secondary text-white shadow-secondary/50' : 
+                'bg-gradient-to-br from-primary to-emerald-600 text-black shadow-primary/50'
+            }`}>
+                <Zap size={32} fill="currentColor" />
+            </div>
+            <h1 className="text-3xl font-display font-bold mb-2">Inzira<span className={activeTab === 'admin' ? 'text-accent' : activeTab === 'company' ? 'text-secondary' : 'text-primary'}>Seat</span></h1>
+            <p className="text-gray-400">
+                {activeTab === 'admin' ? 'System Command Center' : activeTab === 'company' ? 'Operator Portal' : 'Next-Gen Transport'}
+            </p>
+         </div>
 
-        {/* Right Side: Authentication */}
-        <div className={`glass-panel p-8 rounded-[2.5rem] border space-y-6 transition-all duration-500 ${selectedRole === 'systemAdmin' ? 'border-accent/20 shadow-[0_0_50px_rgba(255,184,0,0.1)]' : 'border-white/10'}`}>
-           
-           {/* Role Selection Tabs */}
-           <div className="grid grid-cols-3 gap-2 p-1 bg-black/40 rounded-2xl">
-               {[
-                   { id: 'passenger', label: 'Passenger', icon: UserIcon },
-                   { id: 'companyAdmin', label: 'Company', icon: Briefcase },
-                   { id: 'systemAdmin', label: 'Admin', icon: Server }
-               ].map((tab) => (
-                   <button
-                        key={tab.id}
-                        onClick={() => { setSelectedRole(tab.id as UserRole); setIsSignUp(false); setError(''); }}
-                        className={`flex flex-col items-center justify-center py-3 rounded-xl transition-all ${
-                            selectedRole === tab.id 
-                            ? selectedRole === 'systemAdmin' ? 'bg-accent/10 text-accent border border-accent/20' : 'bg-white/10 text-white shadow-lg' 
-                            : 'text-gray-500 hover:text-gray-300'
-                        }`}
-                   >
-                       <tab.icon size={18} className="mb-1" />
-                       <span className="text-[10px] font-bold uppercase">{tab.label}</span>
-                   </button>
-               ))}
-           </div>
+         {/* Portal Tabs */}
+         <div className="grid grid-cols-3 gap-2 mb-8 p-1 bg-white/5 rounded-xl">
+             <button 
+                onClick={() => { setActiveTab('passenger'); setIsLogin(true); setError(''); }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'passenger' ? 'bg-primary text-black' : 'text-gray-500 hover:text-white'}`}
+             >
+                 Passenger
+             </button>
+             <button 
+                onClick={() => { setActiveTab('company'); setIsLogin(true); setError(''); }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'company' ? 'bg-secondary text-white' : 'text-gray-500 hover:text-white'}`}
+             >
+                 Company
+             </button>
+             <button 
+                onClick={() => { setActiveTab('admin'); setIsLogin(true); setError(''); }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'admin' ? 'bg-accent text-black' : 'text-gray-500 hover:text-white'}`}
+             >
+                 Admin
+             </button>
+         </div>
 
-           <div className="text-center">
-                <h2 className="text-2xl font-bold mb-1">
-                    {selectedRole === 'passenger' ? (isSignUp ? 'Create Account' : 'Welcome Back') : 'Restricted Portal'}
-                </h2>
-                <p className="text-sm text-gray-400">
-                    {selectedRole === 'passenger' 
-                        ? 'Access your digital wallet and book trips.' 
-                        : `Secure login for ${selectedRole === 'companyAdmin' ? 'Transport Providers' : 'System Administrators'}.`
-                    }
-                </p>
-           </div>
-           
-           <form onSubmit={handleAuth} className="space-y-4">
-              {isSignUp && selectedRole === 'passenger' && (
-                  <>
-                    <Input 
-                        placeholder="Full Name" 
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        icon={<UserIcon size={16} />}
-                        required
-                    />
-                    <Input 
-                        placeholder="Phone Number (e.g., 078...)" 
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        icon={<Users2 size={16} />} // Using Users2 as a phone icon proxy or similar
-                        required
-                    />
-                  </>
-              )}
+         <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && activeTab === 'passenger' && (
+                <>
+                <Input 
+                    placeholder="Full Name" 
+                    value={fullName} 
+                    onChange={e => setFullName(e.target.value)} 
+                    icon={<UserIcon size={18} />}
+                    required
+                />
+                <Input 
+                    placeholder="Phone Number" 
+                    value={phone} 
+                    onChange={e => setPhone(e.target.value)} 
+                    icon={<span className="text-xs font-bold">RW</span>}
+                    required
+                />
+                </>
+            )}
+            
+            {(isLogin || activeTab === 'passenger') && (
+                <>
+                <Input 
+                    type="email" 
+                    placeholder="Email Address" 
+                    value={email} 
+                    onChange={e => setEmail(e.target.value)} 
+                    icon={<Mail size={18} />}
+                    required
+                />
+                <Input 
+                    type="password" 
+                    placeholder="Password" 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)} 
+                    icon={<LockIcon size={18} />}
+                    required
+                />
+                </>
+            )}
 
-              <Input 
-                placeholder="Email Address" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                icon={<Mail size={16} />}
-                required
-              />
-              <Input 
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                icon={<LockIcon size={16} />}
-                required
-              />
-              
-              {error && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-xs">
-                      <AlertTriangle size={14} />
-                      {error}
-                  </div>
-              )}
-
-              {/* Warning for restricted roles */}
-              {selectedRole !== 'passenger' && (
-                  <div className={`p-3 border rounded-xl flex items-start gap-2 text-xs ${selectedRole === 'systemAdmin' ? 'bg-accent/10 border-accent/20 text-accent' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500'}`}>
-                      <ShieldAlert size={14} className="shrink-0 mt-0.5" />
-                      <span>Account creation is disabled. Contact the System Administrator for access credentials.</span>
-                  </div>
-              )}
-              
-              <Button type="submit" className={`w-full ${selectedRole === 'systemAdmin' ? 'bg-accent hover:bg-accent/80 text-black' : ''}`} isLoading={loading}>
-                 {isSignUp ? 'Register Account' : 'Secure Login'}
-              </Button>
-           </form>
-
-           {/* Toggle Signup (Passenger Only) */}
-           {selectedRole === 'passenger' && (
-                <div className="text-center text-sm text-gray-500">
-                    <span className="cursor-pointer hover:text-white underline" onClick={() => setIsSignUp(!isSignUp)}>
-                        {isSignUp ? "Already have an account? Login" : "New user? Create account"}
-                    </span>
+            {/* Restricted Access Warning */}
+            {!isLogin && activeTab !== 'passenger' && (
+                <div className="p-4 bg-white/5 border border-dashed border-white/20 rounded-xl text-center">
+                    <ShieldAlert className="mx-auto mb-2 text-gray-400" size={24} />
+                    <p className="text-xs text-gray-400 mb-2">Restricted Access</p>
+                    <p className="text-xs text-gray-500">Account creation for this portal is handled by the System Administrator. Please contact support.</p>
                 </div>
-           )}
+            )}
+            
+            {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2 animate-in slide-in-from-top-2"><AlertTriangle size={16}/> {error}</div>}
 
-           <div className="relative py-4">
-               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
-               <div className="relative flex justify-center"><span className="bg-[#0f0f15] px-2 text-xs text-gray-500 uppercase">InziraSeat Secure</span></div>
-           </div>
-        </div>
+            {(isLogin || activeTab === 'passenger') && (
+                <Button className={`w-full h-12 text-base shadow-lg transition-all ${
+                    activeTab === 'admin' ? 'bg-accent text-black shadow-accent/20 hover:bg-yellow-400' : 
+                    activeTab === 'company' ? 'bg-secondary text-white shadow-secondary/20 hover:bg-violet-600' : 
+                    'bg-primary text-black shadow-primary/20'
+                }`} isLoading={loading}>
+                    {isLogin ? 'Authenticate' : 'Register Account'}
+                </Button>
+            )}
+         </form>
+
+         {activeTab === 'passenger' && (
+             <div className="mt-8 text-center">
+                <p className="text-gray-400 text-sm">
+                    {isLogin ? "New to Inzira?" : "Already have an account?"}
+                    <button 
+                        onClick={() => setIsLogin(!isLogin)}
+                        className="ml-2 text-primary font-bold hover:underline"
+                    >
+                        {isLogin ? "Create Account" : "Sign In"}
+                    </button>
+                </p>
+             </div>
+         )}
       </div>
     </div>
   );
+};
+
+// 9. Scanner View
+const ScannerView = ({ onScan }: { onScan: (data: string | null) => void }) => {
+    const [scanResult, setScanResult] = useState<string | null>(null);
+
+    const handleResult = (result: any, error: any) => {
+        if (result) {
+            setScanResult(result?.text);
+            onScan(result?.text);
+        }
+    };
+
+    return (
+        <div className="max-w-md mx-auto space-y-8 animate-in fade-in duration-500">
+            <div className="text-center">
+                <h1 className="text-3xl font-display font-bold mb-2">Ticket Scanner</h1>
+                <p className="text-gray-400">Align QR code within frame to validate.</p>
+            </div>
+
+            <div className="relative rounded-3xl overflow-hidden border border-primary/30 shadow-[0_0_50px_rgba(0,220,130,0.1)] bg-black aspect-square">
+                <QrReader
+                    onResult={handleResult}
+                    constraints={{ facingMode: 'environment' }}
+                    className="w-full h-full object-cover"
+                />
+                
+                {/* Overlay UI */}
+                <div className="absolute inset-0 border-[30px] border-black/50 pointer-events-none flex items-center justify-center">
+                    <div className="w-64 h-64 border-2 border-primary/50 rounded-3xl relative">
+                        <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary -translate-x-1 -translate-y-1"></div>
+                        <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary translate-x-1 -translate-y-1"></div>
+                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary -translate-x-1 translate-y-1"></div>
+                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary translate-x-1 translate-y-1"></div>
+                        
+                        {/* Scanning Laser */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-primary/50 shadow-[0_0_10px_#10b981] animate-scan"></div>
+                    </div>
+                </div>
+            </div>
+
+            {scanResult && (
+                <div className="glass-panel p-4 rounded-xl flex items-center gap-3 border border-primary/30 bg-primary/10">
+                    <CheckCircle2 className="text-primary" />
+                    <div>
+                        <p className="text-xs text-primary font-bold uppercase">Scanned Successfully</p>
+                        <p className="text-sm font-mono truncate w-64">{scanResult}</p>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 // --- Main App Component ---
@@ -1597,6 +1605,7 @@ const App: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceLog[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
   // Use this to trigger re-fetches
   const refreshData = async () => {
@@ -1637,6 +1646,9 @@ const App: React.FC = () => {
 
         const { data: aData } = await supabase.from('audit_logs').select('*').limit(20).order('timestamp', { ascending: false });
         if (aData) setAuditLogs(aData as AuditLog[]);
+
+        const { data: bkData } = await supabase.from('bookings').select('*');
+        if (bkData) setBookings(bkData as Booking[]);
     };
     fetchGlobalData();
   }, []);
@@ -1740,14 +1752,14 @@ const App: React.FC = () => {
            {activeView === 'search' && <Home onBookingComplete={handleBookingComplete} cities={CITIES} user={currentUser} routes={routes} buses={buses} />}
            {activeView === 'my-bookings' && <WalletView user={currentUser} buses={buses} routes={routes} />}
            
-           {activeView === 'mission-control' && <MissionControl buses={buses} staff={staff} maintenance={maintenance} />}
+           {activeView === 'mission-control' && <MissionControl buses={buses} staff={staff} maintenance={maintenance} bookings={bookings} />}
            {activeView === 'fleet' && <FleetView buses={buses} companyId={currentUser.companyId || 'c1'} refreshData={refreshData} />}
            {activeView === 'staff' && <StaffView staff={staff} refreshData={refreshData} companyId={currentUser.companyId || 'c1'} />}
            {activeView === 'scanner' && <ScannerView onScan={handleScan} />}
            
-           {activeView === 'system-dashboard' && <SystemDashboard auditLogs={auditLogs} companiesCount={companies.length} />}
+           {activeView === 'system-dashboard' && <SystemDashboard auditLogs={auditLogs} companiesCount={companies.length} bookings={bookings} />}
            {activeView === 'companies' && <CompanyManagement companies={companies} refreshData={refreshData} />}
-           {activeView === 'analytics' && <GlobalAnalytics />}
+           {activeView === 'analytics' && <GlobalAnalytics bookings={bookings} />}
            {activeView === 'audit' && <FullAuditLogs logs={auditLogs} />}
            {activeView === 'settings' && <SettingsView user={currentUser} onLogout={handleLogout} refreshUser={refreshData} />}
         </div>
