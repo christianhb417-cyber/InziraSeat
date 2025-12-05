@@ -25,6 +25,15 @@ const formatRWF = (amount: number) => {
   return new Intl.NumberFormat('rw-RW', { style: 'currency', currency: 'RWF', maximumFractionDigits: 0 }).format(amount);
 };
 
+const getInitials = (name: string) => {
+    return name
+        .split(' ')
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+};
+
 // --- Sub-components ---
 
 // 1. Sidebar Navigation (Floating Dock Style)
@@ -101,7 +110,9 @@ const Sidebar = ({ user, activeView, setView, onLogout, isMobileOpen, setIsMobil
           {/* User Profile */}
           <div className="mt-auto px-4 w-full">
             <div className={`p-3 rounded-2xl bg-white/5 border flex items-center gap-3 cursor-pointer transition-colors ${user.role === 'systemAdmin' ? 'border-accent/30 shadow-[0_0_10px_rgba(255,184,0,0.1)]' : 'border-white/5 hover:border-primary/30'}`} onClick={onLogout}>
-              <img src={user.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop"} className={`w-10 h-10 rounded-full object-cover ${user.role === 'systemAdmin' ? 'border-2 border-accent' : 'border border-primary/50'}`} alt="Profile" />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs ${user.role === 'systemAdmin' ? 'bg-accent/20 text-accent border border-accent/50' : 'bg-primary/20 text-primary border border-primary/50'}`}>
+                  {getInitials(user.fullName)}
+              </div>
               <div className="hidden lg:block overflow-hidden">
                 <p className={`text-sm font-bold truncate ${user.role === 'systemAdmin' ? 'text-accent' : 'text-white'}`}>{user.fullName}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-widest">{user.role ? user.role.replace('Admin', '') : 'User'}</p>
@@ -237,7 +248,6 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
       name: '',
       contactEmail: '',
       contactPhone: '',
-      logoUrl: '',
       ownerEmail: ''
   });
 
@@ -266,7 +276,6 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
                   companyName: newCompany.name,
                   contactEmail: newCompany.contactEmail,
                   contactPhone: newCompany.contactPhone,
-                  logo: newCompany.logoUrl,
                   ownerUid: ownerId,
                   status: 'active'
               })
@@ -288,7 +297,7 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
 
           alert("Company registered and Owner promoted successfully!");
           setShowAddModal(false);
-          setNewCompany({ name: '', contactEmail: '', contactPhone: '', logoUrl: '', ownerEmail: '' });
+          setNewCompany({ name: '', contactEmail: '', contactPhone: '', ownerEmail: '' });
           refreshData();
 
       } catch (err: any) {
@@ -322,7 +331,6 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
                    <Input label="Company Name" value={newCompany.name} onChange={e => setNewCompany({...newCompany, name: e.target.value})} placeholder="e.g. Volcano Express" />
                    <Input label="Contact Email" value={newCompany.contactEmail} onChange={e => setNewCompany({...newCompany, contactEmail: e.target.value})} />
                    <Input label="Contact Phone" value={newCompany.contactPhone} onChange={e => setNewCompany({...newCompany, contactPhone: e.target.value})} />
-                   <Input label="Logo URL" value={newCompany.logoUrl} onChange={e => setNewCompany({...newCompany, logoUrl: e.target.value})} placeholder="https://..." />
                    
                    <div className="pt-4 border-t border-white/10">
                        <label className="text-xs font-bold text-accent uppercase mb-2 block">Admin Authorization</label>
@@ -344,8 +352,8 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
            <div key={company.companyId} className="glass-panel p-6 rounded-3xl group border border-white/5 hover:border-primary/30 transition-all flex flex-col h-full">
               <div className="flex justify-between items-start mb-6">
                  <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl bg-white text-black flex items-center justify-center font-bold text-xl font-display overflow-hidden">
-                       {company.logo ? <img src={company.logo} alt="Logo" className="w-full h-full object-cover" /> : company.companyName?.substring(0,2).toUpperCase()}
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 text-white border border-white/10 flex items-center justify-center font-bold text-xl font-display">
+                       {company.companyName?.substring(0,2).toUpperCase()}
                     </div>
                     <div>
                        <h3 className="font-bold text-white text-lg">{company.companyName}</h3>
@@ -469,8 +477,7 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({
         fullName: user.fullName,
-        phone: user.phone || '',
-        avatar: user.avatar || ''
+        phone: user.phone || ''
     });
     const [loading, setLoading] = useState(false);
 
@@ -481,8 +488,7 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
                 .from('users')
                 .update({ 
                     fullName: editForm.fullName,
-                    phone: editForm.phone,
-                    avatar: editForm.avatar
+                    phone: editForm.phone
                 })
                 .eq('userId', user.userId);
 
@@ -509,17 +515,12 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
             <div className="glass-panel p-8 rounded-[2.5rem] border border-white/5 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 
-                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-br from-primary to-secondary relative group">
-                    <img 
-                        src={editForm.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop"} 
-                        className="w-full h-full rounded-full object-cover border-4 border-black bg-black" 
-                        alt="Avatar" 
-                    />
-                    {isEditing && (
-                         <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full cursor-pointer border-4 border-transparent z-10">
-                             <Camera className="text-white" size={32} />
-                         </div>
-                    )}
+                <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-br from-primary to-secondary relative group flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-black flex items-center justify-center border-4 border-black">
+                        <span className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-primary to-secondary">
+                            {getInitials(user.fullName)}
+                        </span>
+                    </div>
                 </div>
                 
                 <div className="flex-1 text-center md:text-left z-10 w-full">
@@ -534,12 +535,6 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
                                 label="Phone Number" 
                                 value={editForm.phone} 
                                 onChange={e => setEditForm({...editForm, phone: e.target.value})} 
-                            />
-                            <Input 
-                                label="Avatar URL" 
-                                value={editForm.avatar} 
-                                onChange={e => setEditForm({...editForm, avatar: e.target.value})}
-                                placeholder="https://..."
                             />
                             <div className="flex gap-4 pt-2">
                                 <Button size="sm" onClick={handleSave} isLoading={loading}><Save size={16} className="mr-2"/> Save Changes</Button>
@@ -780,8 +775,7 @@ const StaffView = ({ staff, refreshData, companyId }: { staff: Staff[], refreshD
                 companyId,
                 fullName: newStaff.fullName,
                 role: newStaff.role,
-                status: 'available',
-                avatar: `https://ui-avatars.com/api/?name=${newStaff.fullName}&background=random`
+                status: 'available'
             });
             if (error) throw error;
             await refreshData();
@@ -837,8 +831,8 @@ const StaffView = ({ staff, refreshData, companyId }: { staff: Staff[], refreshD
              <div className="col-span-full text-center py-10 text-gray-500">No staff members found. Recruit new staff.</div>
          ) : staff.map(person => (
             <div key={person.staffId} className="glass-panel p-6 rounded-3xl text-center relative overflow-hidden group">
-               <div className="w-20 h-20 mx-auto rounded-full p-1 bg-gradient-to-br from-white/10 to-transparent mb-4">
-                  <img src={person.avatar || `https://ui-avatars.com/api/?name=${person.fullName}&background=random`} className="w-full h-full rounded-full object-cover" alt={person.fullName} />
+               <div className="w-20 h-20 mx-auto rounded-full mb-4 bg-gradient-to-br from-white/10 to-transparent border border-white/5 flex items-center justify-center">
+                  <span className="text-3xl font-bold text-gray-300">{getInitials(person.fullName)}</span>
                </div>
                <h3 className="font-bold text-white text-lg">{person.fullName}</h3>
                <p className="text-primary text-xs uppercase font-bold tracking-widest mb-4">{person.role}</p>
@@ -1081,9 +1075,15 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
       return (
         <div className="pb-20 space-y-12 animate-in fade-in duration-500">
           <div className="relative rounded-[3rem] overflow-hidden min-h-[500px] flex flex-col items-center justify-center text-center p-6 border border-white/10 bg-black">
-             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1616432043562-3671ea2e5242?q=80&w=2574&auto=format&fit=crop')] bg-cover bg-center opacity-30 mix-blend-screen"></div>
-             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/50"></div>
+             {/* Gradient Background instead of Image */}
+             <div className="absolute inset-0 bg-gradient-to-br from-[#0f1016] via-[#050508] to-black"></div>
+             {/* Cyber Grid Pattern */}
+             <div className="absolute inset-0 grid-bg opacity-30"></div>
              
+             {/* Decorative Elements */}
+             <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-blob"></div>
+             <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-secondary/10 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
+
              <div className="relative z-10 max-w-4xl space-y-6">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest backdrop-blur-md animate-in fade-in zoom-in duration-500">
                    <Zap size={12} fill="currentColor" /> Next-Gen Transport
@@ -1121,23 +1121,32 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
              </div>
           </div>
           
-          {/* Featured Destinations (3D Tilt Cards) */}
+          {/* Featured Destinations (3D Tilt Cards) - NO IMAGES */}
           <div className="max-w-7xl mx-auto px-4">
              <h2 className="text-2xl font-bold mb-8">Trending Destinations</h2>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {[
-                   { name: 'Musanze', img: 'https://images.unsplash.com/photo-1579685324578-8319f3a61361?w=800&q=80', price: '3,500 RWF' },
-                   { name: 'Rubavu', img: 'https://images.unsplash.com/photo-1580237734185-1d02c8969422?w=800&q=80', price: '4,000 RWF' },
-                   { name: 'Akagera', img: 'https://images.unsplash.com/photo-1547471080-75451c1c6381?w=800&q=80', price: '5,500 RWF' },
+                   { name: 'Musanze', gradient: 'bg-gradient-to-br from-emerald-900 to-green-800', price: '3,500 RWF', icon: <MapPin className="text-emerald-400" /> },
+                   { name: 'Rubavu', gradient: 'bg-gradient-to-br from-blue-900 to-cyan-800', price: '4,000 RWF', icon: <Navigation className="text-cyan-400" /> },
+                   { name: 'Akagera', gradient: 'bg-gradient-to-br from-yellow-900 to-orange-800', price: '5,500 RWF', icon: <Globe className="text-yellow-400" /> },
                 ].map((city, i) => (
-                   <div key={i} className="group relative h-[400px] rounded-[2.5rem] overflow-hidden cursor-pointer hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500">
-                      <img src={city.img} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={city.name} />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-                      <div className="absolute bottom-0 left-0 p-8">
-                         <h3 className="text-3xl font-display font-bold text-white mb-2">{city.name}</h3>
-                         <div className="flex items-center gap-3">
-                            <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/20">Popular</span>
-                            <span className="text-primary font-bold">{city.price}</span>
+                   <div key={i} className={`group relative h-[300px] rounded-[2.5rem] overflow-hidden cursor-pointer hover:shadow-2xl hover:shadow-primary/20 transition-all duration-500 ${city.gradient}`}>
+                      {/* Abstract Shapes */}
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-white/10 transition-colors"></div>
+                      <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/20 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl"></div>
+                      
+                      <div className="absolute inset-0 flex flex-col justify-between p-8">
+                         <div className="flex justify-end">
+                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/10">
+                                {city.icon}
+                            </div>
+                         </div>
+                         <div>
+                            <h3 className="text-4xl font-display font-bold text-white mb-2">{city.name}</h3>
+                            <div className="flex items-center gap-3">
+                                <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold text-white border border-white/10">Popular Route</span>
+                                <span className="text-white/80 font-bold">{city.price}</span>
+                            </div>
                          </div>
                       </div>
                    </div>
@@ -1659,7 +1668,6 @@ const App: React.FC = () => {
             fullName: data.fullName,
             role: data.role,
             phone: data.phone,
-            avatar: data.avatar,
             companyId: data.companyId
         };
         setCurrentUser(appUser);

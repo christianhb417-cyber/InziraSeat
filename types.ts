@@ -8,15 +8,13 @@ export interface User {
   phone: string;
   role: UserRole;
   companyId?: string; // If companyAdmin
-  avatar?: string;
   createdAt?: string;
 }
 
 export interface Company {
   companyId: string;
-  companyName: string; // "name" in backend.json, mapped here
-  logo: string;
-  contact: string; // "contactEmail" / "contactPhone"
+  companyName: string; 
+  contact: string; 
   ownerUid?: string;
   status?: 'pending' | 'active' | 'suspended' | 'rejected';
 }
@@ -51,7 +49,6 @@ export interface Staff {
   fullName: string;
   role: 'driver' | 'mechanic' | 'attendant';
   status: 'available' | 'on_duty' | 'leave';
-  avatar: string;
 }
 
 export interface MaintenanceLog {
@@ -63,13 +60,12 @@ export interface MaintenanceLog {
   cost: number;
 }
 
-// "Trip" in backend.json
 export interface Route {
-  routeId: string; // tripId
+  routeId: string; 
   busId: string;
-  from: string; // origin
-  to: string; // destination
-  departureTime: string; // ISO string
+  from: string; 
+  to: string; 
+  departureTime: string; 
   arrivalTime?: string;
   price: number;
   duration: string;
@@ -87,7 +83,7 @@ export interface Booking {
   seatNumber: number;
   paymentStatus: PaymentStatus;
   createdAt: string;
-  qrCodeValue: string; // Unique secure string for QR
+  qrCodeValue: string; 
   status: BookingStatus;
   totalPrice?: number;
 }
@@ -120,7 +116,7 @@ export interface SeatLock {
   routeId: string;
   seatNumber: number;
   userId: string;
-  expiresAt: number; // Timestamp
+  expiresAt: number; 
 }
 
 export interface AppState {

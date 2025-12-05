@@ -8,7 +8,6 @@ export const MOCK_USERS: User[] = [
     email: 'alex@example.com',
     phone: '+250788123456',
     role: 'passenger',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
     createdAt: '2024-01-01T10:00:00Z'
   },
   {
@@ -18,7 +17,6 @@ export const MOCK_USERS: User[] = [
     phone: '+250788654321',
     role: 'companyAdmin',
     companyId: 'c1',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop',
     createdAt: '2023-11-15T08:30:00Z'
   },
   {
@@ -27,7 +25,6 @@ export const MOCK_USERS: User[] = [
     email: 'admin@inzira.com',
     phone: '+250788000000',
     role: 'systemAdmin',
-    avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100&h=100&fit=crop',
     createdAt: '2023-01-01T00:00:00Z'
   }
 ];
@@ -36,14 +33,12 @@ export const MOCK_COMPANIES: Company[] = [
   {
     companyId: 'c1',
     companyName: 'Virunga Express',
-    logo: 'VE',
     contact: 'info@virunga.rw',
     status: 'active'
   },
   {
     companyId: 'c2',
     companyName: 'Ritco',
-    logo: 'RC',
     contact: 'info@ritco.rw',
     status: 'active'
   }
@@ -112,10 +107,10 @@ export const MOCK_BUSES: Bus[] = [
 ];
 
 export const MOCK_STAFF: Staff[] = [
-  { staffId: 's1', companyId: 'c1', fullName: 'Jean Bosco', role: 'driver', status: 'on_duty', avatar: 'https://randomuser.me/api/portraits/men/32.jpg' },
-  { staffId: 's2', companyId: 'c1', fullName: 'Eric Manzi', role: 'driver', status: 'available', avatar: 'https://randomuser.me/api/portraits/men/45.jpg' },
-  { staffId: 's3', companyId: 'c1', fullName: 'Alice Uwase', role: 'attendant', status: 'available', avatar: 'https://randomuser.me/api/portraits/women/44.jpg' },
-  { staffId: 's4', companyId: 'c1', fullName: 'David Keza', role: 'mechanic', status: 'on_duty', avatar: 'https://randomuser.me/api/portraits/men/22.jpg' },
+  { staffId: 's1', companyId: 'c1', fullName: 'Jean Bosco', role: 'driver', status: 'on_duty' },
+  { staffId: 's2', companyId: 'c1', fullName: 'Eric Manzi', role: 'driver', status: 'available' },
+  { staffId: 's3', companyId: 'c1', fullName: 'Alice Uwase', role: 'attendant', status: 'available' },
+  { staffId: 's4', companyId: 'c1', fullName: 'David Keza', role: 'mechanic', status: 'on_duty' },
 ];
 
 export const MOCK_MAINTENANCE: MaintenanceLog[] = [
