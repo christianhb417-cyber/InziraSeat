@@ -8,7 +8,7 @@ import {
   Users2, Gauge, AlertTriangle, Briefcase, PlusCircle, Globe, Server, Activity, Search,
   ChevronLeft, FileText, Lock, Map, Ban, Check, Download, BarChart3, ToggleLeft, ToggleRight,
   Volume2, Mail, Lock as LockIcon, ShieldAlert, Edit2, Save, Camera, Upload, Command, Trash2,
-  Wallet, ArrowUpRight, ArrowDownLeft
+  Wallet, ArrowUpRight, ArrowDownLeft, Phone
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { QrReader } from 'react-qr-reader';
@@ -742,7 +742,7 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
             </div>
 
             {/* Profile Card */}
-            <div className="glass-panel p-8 rounded-[2.5rem] border border-white/5 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+            <div className="glass-panel p-8 rounded-[2.5rem] border border-white/10 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                 
                 <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-br from-primary to-secondary relative group flex items-center justify-center">
@@ -819,6 +819,8 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
    const [showTransactModal, setShowTransactModal] = useState(false);
    const [transactType, setTransactType] = useState<'deposit' | 'withdraw'>('deposit');
    const [transactAmount, setTransactAmount] = useState<string>('');
+   const [transactPhone, setTransactPhone] = useState<string>('');
+   const [selectedProvider, setSelectedProvider] = useState<'momo' | 'airtel'>('momo');
    const [transactLoading, setTransactLoading] = useState(false);
 
    // Fetch bookings & transactions
@@ -855,20 +857,26 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
            if (transactType === 'deposit' && amount < 100) throw new Error("Minimum deposit is 100 RWF");
            if (transactType === 'withdraw' && amount < 500) throw new Error("Minimum withdrawal is 500 RWF");
            if (transactType === 'withdraw' && amount > (user.walletBalance || 0)) throw new Error("Insufficient funds");
+           
+           if (!transactPhone || transactPhone.length < 10) throw new Error("Please enter a valid phone number");
+
+           // Simulate USSD delay
+           await new Promise(resolve => setTimeout(resolve, 2000));
 
            // Call the Supabase RPC function (secure server-side logic)
            const { data, error } = await supabase.rpc('handle_wallet_transaction', {
                p_user_id: user.userId,
                p_amount: amount,
                p_type: transactType === 'deposit' ? 'deposit' : 'withdrawal',
-               p_method: 'momo' // Default for now
+               p_method: `${selectedProvider === 'momo' ? 'MTN Mobile Money' : 'Airtel Money'} (${transactPhone})`
            });
 
            if (error) throw error;
            
-           alert(`${transactType === 'deposit' ? 'Deposit' : 'Withdrawal'} successful!`);
+           alert(`${transactType === 'deposit' ? 'Deposit' : 'Withdrawal'} successful! Transaction recorded.`);
            setShowTransactModal(false);
            setTransactAmount('');
+           setTransactPhone('');
            refreshData(); // Updates global user state (balance)
        } catch (err: any) {
            alert(err.message);
@@ -909,14 +917,14 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
          {/* Transaction Modal */}
          {showTransactModal && (
              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                 <div className="w-full max-w-sm glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
+                 <div className="w-full max-w-md glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
                      <button onClick={() => setShowTransactModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X/></button>
                      <h2 className="text-xl font-bold mb-1 capitalize">{transactType} Funds</h2>
                      <p className="text-xs text-gray-400 mb-6">
                          {transactType === 'deposit' ? 'Min: 100 RWF' : 'Min: 500 RWF'}
                      </p>
                      
-                     <div className="space-y-4">
+                     <div className="space-y-6">
                          <div className="space-y-2">
                              <label className="text-xs text-gray-400 font-bold ml-1">Amount (RWF)</label>
                              <input 
@@ -927,9 +935,44 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
                                 onChange={(e) => setTransactAmount(e.target.value)}
                              />
                          </div>
-                         <Button className="w-full" onClick={handleTransaction} isLoading={transactLoading}>
-                             Confirm {transactType}
+
+                         <div className="space-y-2">
+                            <label className="text-xs text-gray-400 font-bold ml-1">Payment Provider</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div 
+                                    onClick={() => setSelectedProvider('momo')}
+                                    className={`p-3 rounded-xl border cursor-pointer flex flex-col items-center justify-center gap-2 transition-all ${selectedProvider === 'momo' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-yellow-500 text-black flex items-center justify-center font-bold text-xs">M</div>
+                                    <span className="text-xs font-bold">MTN MoMo</span>
+                                </div>
+                                <div 
+                                    onClick={() => setSelectedProvider('airtel')}
+                                    className={`p-3 rounded-xl border cursor-pointer flex flex-col items-center justify-center gap-2 transition-all ${selectedProvider === 'airtel' ? 'bg-red-500/10 border-red-500 text-red-500' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-xs">A</div>
+                                    <span className="text-xs font-bold">Airtel Money</span>
+                                </div>
+                            </div>
+                         </div>
+
+                         <div className="space-y-2">
+                             <label className="text-xs text-gray-400 font-bold ml-1">Phone Number</label>
+                             <Input 
+                                placeholder="078..." 
+                                value={transactPhone} 
+                                onChange={(e) => setTransactPhone(e.target.value)}
+                                icon={<Phone size={16} />} 
+                            />
+                         </div>
+
+                         <Button className="w-full h-12" onClick={handleTransaction} isLoading={transactLoading}>
+                             {transactLoading ? `Waiting for USSD on ${transactPhone}...` : `Confirm ${transactType}`}
                          </Button>
+                         
+                         <p className="text-[10px] text-center text-gray-500 flex items-center justify-center gap-1">
+                             <Lock size={10} /> Secure SSL Encrypted Gateway
+                         </p>
                      </div>
                  </div>
              </div>
@@ -960,7 +1003,7 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
                  {transactions.length === 0 ? (
                      <div className="text-center py-20 text-gray-500">No transactions found.</div>
                  ) : transactions.map(tx => (
-                     <div key={tx.transactionId} className="glass-panel p-4 rounded-xl flex items-center justify-between">
+                     <div key={tx.transactionId} className="glass-panel p-4 rounded-xl flex items-center justify-between border border-white/5 hover:border-white/10 transition-colors">
                          <div className="flex items-center gap-4">
                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                                  tx.type === 'deposit' ? 'bg-green-500/10 text-green-500' : 
@@ -970,7 +1013,7 @@ const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: B
                              </div>
                              <div>
                                  <p className="font-bold text-white capitalize">{tx.type}</p>
-                                 <p className="text-xs text-gray-400">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                                 <p className="text-xs text-gray-400">{new Date(tx.createdAt).toLocaleDateString()} • <span className="text-gray-500">{tx.method}</span></p>
                              </div>
                          </div>
                          <p className={`font-mono font-bold ${tx.type === 'deposit' ? 'text-green-400' : 'text-white'}`}>
