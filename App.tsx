@@ -7,12 +7,13 @@ import {
   ArrowRight, ShieldCheck, Zap, Navigation, ScanLine, Fuel, Wrench, 
   Users2, Gauge, AlertTriangle, Briefcase, PlusCircle, Globe, Server, Activity, Search,
   ChevronLeft, FileText, Lock, Map, Ban, Check, Download, BarChart3, ToggleLeft, ToggleRight,
-  Volume2, Mail, Lock as LockIcon, ShieldAlert, Edit2, Save, Camera, Upload, Command, Trash2
+  Volume2, Mail, Lock as LockIcon, ShieldAlert, Edit2, Save, Camera, Upload, Command, Trash2,
+  Wallet, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { QrReader } from 'react-qr-reader';
 
-import { AppState, Booking, Bus as BusType, Route, SeatLock, User, Staff, MaintenanceLog, BookingStatus, AuditLog, Company, UserRole } from './types';
+import { AppState, Booking, Bus as BusType, Route, SeatLock, User, Staff, MaintenanceLog, BookingStatus, AuditLog, Company, UserRole, WalletTransaction } from './types';
 import { CITIES, CITY_COORDINATES } from './constants';
 import { Button } from './components/Button';
 import { Input } from './components/Input';
@@ -26,6 +27,7 @@ const formatRWF = (amount: number) => {
 };
 
 const getInitials = (name: string) => {
+    if (!name) return '??'; // Safety check
     return name
         .split(' ')
         .map((n) => n[0])
@@ -44,7 +46,7 @@ const Sidebar = ({ user, activeView, setView, onLogout, isMobileOpen, setIsMobil
     if (user.role === 'passenger') {
       return [
         { id: 'search', label: 'Book Trip', icon: <Navigation size={20} /> },
-        { id: 'my-bookings', label: 'My Wallet', icon: <Ticket size={20} /> },
+        { id: 'my-bookings', label: 'My Wallet', icon: <Wallet size={20} /> },
         ...common
       ];
     }
@@ -114,7 +116,7 @@ const Sidebar = ({ user, activeView, setView, onLogout, isMobileOpen, setIsMobil
                   {getInitials(user.fullName)}
               </div>
               <div className="hidden lg:block overflow-hidden">
-                <p className={`text-sm font-bold truncate ${user.role === 'systemAdmin' ? 'text-accent' : 'text-white'}`}>{user.fullName}</p>
+                <p className={`text-sm font-bold truncate ${user.role === 'systemAdmin' ? 'text-accent' : 'text-white'}`}>{user.fullName || 'User'}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-widest">{user.role ? user.role.replace('Admin', '') : 'User'}</p>
               </div>
               <LogOut size={16} className="ml-auto text-gray-500 hover:text-white lg:block hidden" />
@@ -141,6 +143,7 @@ const MissionControl = ({ buses, staff, maintenance, bookings }: { buses: BusTyp
   // Calculate Real Stats
   const revenueToday = bookings
     .filter(b => {
+        if (!b.createdAt) return false;
         const today = new Date().toISOString().split('T')[0];
         return b.createdAt.startsWith(today) && b.paymentStatus === 'paid';
     })
@@ -196,10 +199,216 @@ const MissionControl = ({ buses, staff, maintenance, bookings }: { buses: BusTyp
   );
 };
 
+// 4. Fleet Management View
+const FleetView = ({ buses, companyId, refreshData }: { buses: BusType[], companyId: string, refreshData: () => void }) => {
+    const [isAdding, setIsAdding] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [newBus, setNewBus] = useState({
+        busNumber: '',
+        plateNumber: '',
+        driverName: '',
+        totalSeats: 30
+    });
+
+    const myBuses = buses.filter(b => b.companyId === companyId);
+
+    const handleAddBus = async () => {
+        if(!newBus.busNumber || !newBus.plateNumber) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('buses').insert({
+                companyId,
+                busNumber: newBus.busNumber,
+                plateNumber: newBus.plateNumber,
+                driverName: newBus.driverName || 'Unassigned',
+                totalSeats: newBus.totalSeats,
+                status: 'offline',
+                amenities: ['Wifi', 'USB'],
+                fuelLevel: 100,
+                engineHealth: 100,
+                nextMaintenance: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+                location: CITY_COORDINATES['Kigali']
+            });
+            if (error) throw error;
+            setIsAdding(false);
+            setNewBus({ busNumber: '', plateNumber: '', driverName: '', totalSeats: 30 });
+            refreshData();
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex justify-between items-end border-b border-white/5 pb-6">
+                <div>
+                    <h1 className="text-3xl font-display font-bold mb-2">Fleet Operations</h1>
+                    <p className="text-gray-400">Manage vehicle status and assignments.</p>
+                </div>
+                <Button onClick={() => setIsAdding(true)} className="rounded-xl"><PlusCircle size={18} className="mr-2" /> Add Vehicle</Button>
+            </div>
+
+            {isAdding && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="w-full max-w-lg glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
+                        <button onClick={() => setIsAdding(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+                        <h2 className="text-xl font-bold mb-6">Add New Vehicle</h2>
+                        <div className="space-y-4">
+                            <Input label="Bus Number" value={newBus.busNumber} onChange={e => setNewBus({...newBus, busNumber: e.target.value})} placeholder="e.g. B-001" />
+                            <Input label="Plate Number" value={newBus.plateNumber} onChange={e => setNewBus({...newBus, plateNumber: e.target.value})} placeholder="RAC 123 A" />
+                            <Input label="Driver Name" value={newBus.driverName} onChange={e => setNewBus({...newBus, driverName: e.target.value})} />
+                            <Input label="Total Seats" type="number" value={newBus.totalSeats} onChange={e => setNewBus({...newBus, totalSeats: parseInt(e.target.value)})} />
+                            <Button className="w-full mt-4" onClick={handleAddBus} isLoading={loading}>Register Vehicle</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {myBuses.map(bus => (
+                    <div key={bus.busId} className="glass-panel p-6 rounded-3xl relative overflow-hidden group border border-white/5 hover:border-primary/30 transition-all">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{bus.busNumber}</h3>
+                                <p className="text-sm text-gray-500 font-mono">{bus.plateNumber}</p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase border ${
+                                bus.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
+                                bus.status === 'maintenance' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 
+                                'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                            }`}>{bus.status}</span>
+                        </div>
+                        
+                        <div className="space-y-3 mb-6">
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Fuel Level</span>
+                                <span className={bus.fuelLevel < 20 ? 'text-red-400' : 'text-primary'}>{bus.fuelLevel}%</span>
+                            </div>
+                            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${bus.fuelLevel < 20 ? 'bg-red-500' : 'bg-primary'}`} style={{width: `${bus.fuelLevel}%`}}></div>
+                            </div>
+                            
+                            <div className="flex justify-between text-xs pt-2">
+                                <span className="text-gray-500">Engine Health</span>
+                                <span className={bus.engineHealth < 70 ? 'text-yellow-400' : 'text-primary'}>{bus.engineHealth}%</span>
+                            </div>
+                            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${bus.engineHealth < 70 ? 'bg-yellow-500' : 'bg-primary'}`} style={{width: `${bus.engineHealth}%`}}></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                             <UserIcon size={14} /> {bus.driverName}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 5. Staff Management View
+const StaffView = ({ staff, refreshData, companyId }: { staff: Staff[], refreshData: () => void, companyId: string }) => {
+    const [isAdding, setIsAdding] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [newStaff, setNewStaff] = useState({
+        fullName: '',
+        role: 'driver' as const,
+    });
+
+    const myStaff = staff.filter(s => s.companyId === companyId);
+
+    const handleAddStaff = async () => {
+        if(!newStaff.fullName) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('staff').insert({
+                companyId,
+                fullName: newStaff.fullName,
+                role: newStaff.role,
+                status: 'available'
+            });
+            if (error) throw error;
+            setIsAdding(false);
+            setNewStaff({ fullName: '', role: 'driver' });
+            refreshData();
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex justify-between items-end border-b border-white/5 pb-6">
+                <div>
+                    <h1 className="text-3xl font-display font-bold mb-2">Staff Roster</h1>
+                    <p className="text-gray-400">Manage drivers, mechanics, and support staff.</p>
+                </div>
+                <Button onClick={() => setIsAdding(true)} className="rounded-xl"><PlusCircle size={18} className="mr-2" /> Add Staff</Button>
+            </div>
+
+             {isAdding && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="w-full max-w-lg glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
+                        <button onClick={() => setIsAdding(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+                        <h2 className="text-xl font-bold mb-6">Add Staff Member</h2>
+                        <div className="space-y-4">
+                            <Input label="Full Name" value={newStaff.fullName} onChange={e => setNewStaff({...newStaff, fullName: e.target.value})} placeholder="John Doe" />
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1.5 ml-1">Role</label>
+                                <select 
+                                    className="w-full bg-surface/50 border border-white/10 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:border-primary/50"
+                                    value={newStaff.role}
+                                    onChange={(e: any) => setNewStaff({...newStaff, role: e.target.value})}
+                                >
+                                    <option value="driver">Driver</option>
+                                    <option value="mechanic">Mechanic</option>
+                                    <option value="attendant">Attendant</option>
+                                </select>
+                            </div>
+                            <Button className="w-full mt-4" onClick={handleAddStaff} isLoading={loading}>Register Staff</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {myStaff.map(s => (
+                    <div key={s.staffId} className="glass-panel p-6 rounded-3xl flex items-center gap-4 border border-white/5">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                            s.role === 'driver' ? 'bg-primary/20 text-primary' : 
+                            s.role === 'mechanic' ? 'bg-accent/20 text-accent' : 
+                            'bg-secondary/20 text-secondary'
+                        }`}>
+                            {getInitials(s.fullName)}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-white">{s.fullName}</h3>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">{s.role}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className={`w-2 h-2 rounded-full ${
+                                    s.status === 'available' ? 'bg-green-500' : 
+                                    s.status === 'on_duty' ? 'bg-blue-500' : 'bg-red-500'
+                                }`}></div>
+                                <span className="text-xs text-gray-500 capitalize">{s.status.replace('_', ' ')}</span>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // 3. System Overwatch (System Admin)
 const SystemDashboard = ({ auditLogs, companiesCount, bookings }: { auditLogs: AuditLog[], companiesCount: number, bookings: Booking[] }) => {
   
   const dailyPassengers = bookings.filter(b => {
+      if (!b.createdAt) return false;
       const today = new Date().toISOString().split('T')[0];
       return b.createdAt.startsWith(today);
   }).length;
@@ -380,7 +589,7 @@ const CompanyManagement = ({ companies, refreshData }: { companies: Company[], r
                     </div>
                     <div>
                        <h3 className="font-bold text-white text-lg">{company.companyName}</h3>
-                       <p className="text-xs text-gray-500">{company.contact}</p>
+                       <p className="text-xs text-gray-500">{company.contactEmail}</p>
                     </div>
                  </div>
                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
@@ -497,7 +706,7 @@ const FullAuditLogs = ({ logs }: { logs: AuditLog[] }) => {
 const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: () => void, refreshUser: () => void }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({
-        fullName: user.fullName,
+        fullName: user.fullName || '',
         phone: user.phone || ''
     });
     const [loading, setLoading] = useState(false);
@@ -564,7 +773,7 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
                         </div>
                     ) : (
                         <>
-                            <h2 className="text-3xl font-bold text-white mb-1">{user.fullName}</h2>
+                            <h2 className="text-3xl font-bold text-white mb-1">{user.fullName || 'User'}</h2>
                             <p className="text-primary font-bold uppercase tracking-widest text-xs mb-4">{user.role}</p>
                             <div className="flex flex-col md:flex-row gap-4 justify-center md:justify-start">
                                 <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setIsEditing(true)}>
@@ -598,325 +807,177 @@ const SettingsView = ({ user, onLogout, refreshUser }: { user: User, onLogout: (
     );
 };
 
-// 4. Fleet View (Detailed Bus Creation)
-const FleetView = ({ buses, companyId, refreshData }: { buses: BusType[], companyId: string, refreshData: () => void }) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newBus, setNewBus] = useState({
-      plateNumber: '',
-      busNumber: '',
-      totalSeats: 30,
-      amenities: [] as string[]
-  });
-
-  const amenitiesList = ['WiFi', 'AC', 'USB Charging', 'Snacks', 'TV', 'Reclining Seats'];
-
-  const toggleAmenity = (am: string) => {
-      if (newBus.amenities.includes(am)) {
-          setNewBus({...newBus, amenities: newBus.amenities.filter(a => a !== am)});
-      } else {
-          setNewBus({...newBus, amenities: [...newBus.amenities, am]});
-      }
-  };
-
-  const handleAddBus = async () => {
-      setIsSubmitting(true);
-      try {
-          const { error } = await supabase.from('buses').insert({
-              companyId,
-              plateNumber: newBus.plateNumber,
-              busNumber: newBus.busNumber,
-              totalSeats: newBus.totalSeats,
-              amenities: newBus.amenities,
-              status: 'active',
-              fuelLevel: 100,
-              engineHealth: 100,
-              location: CITY_COORDINATES['Kigali'] // Default start
-          });
-
-          if (error) throw error;
-          await refreshData();
-          setIsAdding(false);
-          setNewBus({ plateNumber: '', busNumber: '', totalSeats: 30, amenities: [] });
-      } catch (err) {
-          console.error("Failed to add bus", err);
-      } finally {
-          setIsSubmitting(false);
-      }
-  };
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500 relative">
-      <div className="flex justify-between items-end border-b border-white/5 pb-6">
-        <div>
-           <h1 className="text-3xl font-display font-bold mb-2">Fleet Management</h1>
-           <p className="text-gray-400">Monitor vehicle health and assignments.</p>
-        </div>
-        <Button variant="primary" size="sm" className="rounded-xl" onClick={() => setIsAdding(true)}>
-            <PlusCircle size={18} className="mr-2" /> Add Vehicle
-        </Button>
-      </div>
-      
-      {/* Add Bus Modal Overlay */}
-      {isAdding && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-              <div className="w-full max-w-lg glass-panel-heavy border border-primary/30 p-8 rounded-3xl relative shadow-[0_0_50px_rgba(0,220,130,0.1)]">
-                  <button onClick={() => setIsAdding(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X/></button>
-                  
-                  <div className="flex items-center gap-3 mb-6 text-primary">
-                      <Bus size={24} />
-                      <h2 className="text-xl font-display font-bold">New Vehicle Requisition</h2>
-                  </div>
-
-                  <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                          <Input 
-                              label="Plate Number" 
-                              placeholder="RAC 123 A" 
-                              value={newBus.plateNumber}
-                              onChange={e => setNewBus({...newBus, plateNumber: e.target.value})}
-                          />
-                          <Input 
-                              label="Fleet Number" 
-                              placeholder="V-001" 
-                              value={newBus.busNumber}
-                              onChange={e => setNewBus({...newBus, busNumber: e.target.value})}
-                          />
-                      </div>
-                      <div className="space-y-2">
-                           <label className="text-xs text-gray-400 font-bold ml-1">Capacity</label>
-                           <input 
-                              type="range" min="10" max="60" 
-                              className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary"
-                              value={newBus.totalSeats}
-                              onChange={e => setNewBus({...newBus, totalSeats: parseInt(e.target.value)})}
-                           />
-                           <div className="text-right text-sm font-bold text-primary">{newBus.totalSeats} Seats</div>
-                      </div>
-
-                      <div className="space-y-2">
-                          <label className="text-xs text-gray-400 font-bold ml-1">Amenities</label>
-                          <div className="flex flex-wrap gap-2">
-                              {amenitiesList.map(am => (
-                                  <button 
-                                    key={am}
-                                    onClick={() => toggleAmenity(am)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                                        newBus.amenities.includes(am) 
-                                        ? 'bg-primary text-black border-primary' 
-                                        : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/30'
-                                    }`}
-                                  >
-                                      {am}
-                                  </button>
-                              ))}
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="mt-8 pt-6 border-t border-white/5 flex gap-4">
-                      <Button variant="ghost" onClick={() => setIsAdding(false)} className="flex-1">Cancel</Button>
-                      <Button variant="primary" onClick={handleAddBus} isLoading={isSubmitting} className="flex-1">Initialize Unit</Button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {buses.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-gray-500 border border-dashed border-white/10 rounded-3xl">
-                <Bus size={48} className="mx-auto mb-4 opacity-50" />
-                <p>Fleet is empty. Add your first vehicle.</p>
-            </div>
-        ) : buses.map(bus => (
-           <div key={bus.busId} className="glass-panel p-6 rounded-3xl group border border-white/5 hover:border-primary/30 transition-all">
-              <div className="flex justify-between items-start mb-6">
-                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-surfaceHighlight flex items-center justify-center text-gray-400">
-                       <Bus size={20} />
-                    </div>
-                    <div>
-                       <h3 className="font-bold text-white">{bus.plateNumber}</h3>
-                       <p className="text-xs text-gray-500">Fleet #{bus.busNumber}</p>
-                    </div>
-                 </div>
-                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                    bus.status === 'active' || bus.status === 'departed' ? 'bg-primary/20 text-primary' : 
-                    bus.status === 'maintenance' ? 'bg-accent/20 text-accent' : 'bg-gray-700 text-gray-300'
-                 }`}>{bus.status}</span>
-              </div>
-              
-              <div className="space-y-4">
-                 <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                       <span>Fuel Level</span>
-                       <span>{bus.fuelLevel}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-                       <div className="h-full bg-blue-500 transition-all" style={{ width: `${bus.fuelLevel}%` }}></div>
-                    </div>
-                 </div>
-                 <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                       <span>Engine Health</span>
-                       <span>{bus.engineHealth}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-                       <div className={`h-full transition-all ${bus.engineHealth > 80 ? 'bg-emerald-500' : 'bg-orange-500'}`} style={{ width: `${bus.engineHealth}%` }}></div>
-                    </div>
-                 </div>
-                 {bus.amenities && bus.amenities.length > 0 && (
-                     <div className="flex flex-wrap gap-1 mt-2">
-                         {bus.amenities.map(a => <span key={a} className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded text-gray-400">{a}</span>)}
-                     </div>
-                 )}
-              </div>
-
-              <div className="mt-6 pt-6 border-t border-white/5 flex gap-2">
-                 <Button variant="ghost" className="flex-1 text-xs bg-white/5">Details</Button>
-                 <Button variant="ghost" className="flex-1 text-xs bg-white/5">Log Maint.</Button>
-              </div>
-           </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// 5. Staff View (With Recruitment)
-const StaffView = ({ staff, refreshData, companyId }: { staff: Staff[], refreshData: () => void, companyId: string }) => {
-    const [showRecruit, setShowRecruit] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [newStaff, setNewStaff] = useState({ fullName: '', role: 'driver' as const });
-
-    const handleRecruit = async () => {
-        setLoading(true);
-        try {
-            const { error } = await supabase.from('staff').insert({
-                companyId,
-                fullName: newStaff.fullName,
-                role: newStaff.role,
-                status: 'available'
-            });
-            if (error) throw error;
-            await refreshData();
-            setShowRecruit(false);
-            setNewStaff({ fullName: '', role: 'driver' });
-        } catch (err: any) {
-            alert(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-    <div className="space-y-8 animate-in fade-in duration-500 relative">
-      <div className="flex justify-between items-end border-b border-white/5 pb-6">
-        <div>
-           <h1 className="text-3xl font-display font-bold mb-2">Staff Operations</h1>
-           <p className="text-gray-400">Manage drivers, mechanics, and attendants.</p>
-        </div>
-        <Button variant="primary" size="sm" className="rounded-xl" onClick={() => setShowRecruit(true)}>
-            <PlusCircle size={18} className="mr-2" /> Recruit
-        </Button>
-      </div>
-
-      {/* Recruit Modal */}
-      {showRecruit && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-              <div className="w-full max-w-sm glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
-                  <button onClick={() => setShowRecruit(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X/></button>
-                  <h2 className="text-xl font-bold mb-4">Add Staff Member</h2>
-                  <div className="space-y-4">
-                      <Input label="Full Name" value={newStaff.fullName} onChange={e => setNewStaff({...newStaff, fullName: e.target.value})} />
-                      <div className="space-y-2">
-                          <label className="text-xs text-gray-400 font-bold ml-1">Role</label>
-                          <select 
-                            className="w-full bg-surface/50 border border-white/10 text-white rounded-xl px-4 py-2.5 focus:outline-none"
-                            value={newStaff.role}
-                            onChange={(e: any) => setNewStaff({...newStaff, role: e.target.value})}
-                          >
-                              <option value="driver">Driver</option>
-                              <option value="mechanic">Mechanic</option>
-                              <option value="attendant">Attendant</option>
-                          </select>
-                      </div>
-                      <Button className="w-full mt-4" onClick={handleRecruit} isLoading={loading}>Confirm Recruitment</Button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-         {staff.length === 0 ? (
-             <div className="col-span-full text-center py-10 text-gray-500">No staff members found. Recruit new staff.</div>
-         ) : staff.map(person => (
-            <div key={person.staffId} className="glass-panel p-6 rounded-3xl text-center relative overflow-hidden group">
-               <div className="w-20 h-20 mx-auto rounded-full mb-4 bg-gradient-to-br from-white/10 to-transparent border border-white/5 flex items-center justify-center">
-                  <span className="text-3xl font-bold text-gray-300">{getInitials(person.fullName)}</span>
-               </div>
-               <h3 className="font-bold text-white text-lg">{person.fullName}</h3>
-               <p className="text-primary text-xs uppercase font-bold tracking-widest mb-4">{person.role}</p>
-               
-               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 text-xs text-gray-300 mb-6">
-                  <div className={`w-2 h-2 rounded-full ${person.status === 'on_duty' ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                  {person.status.replace('_', ' ')}
-               </div>
-
-               <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 text-xs border-white/10">Schedule</Button>
-                  <Button variant="ghost" className="bg-white/5 text-xs"><Settings size={14}/></Button>
-               </div>
-            </div>
-         ))}
-      </div>
-    </div>
-  );
-};
-
 // 6. Wallet / My Bookings View (Active Supabase Fetching)
-const WalletView = ({ user, buses, routes }: { user: User, buses: BusType[], routes: Route[] }) => {
+const WalletView = ({ user, buses, routes, refreshData }: { user: User, buses: BusType[], routes: Route[], refreshData: () => void }) => {
    const [trackingBusId, setTrackingBusId] = useState<string | null>(null);
    const [bookings, setBookings] = useState<Booking[]>([]);
+   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
    const [loading, setLoading] = useState(true);
+   const [viewMode, setViewMode] = useState<'tickets' | 'transactions'>('tickets');
+   
+   // Modal States
+   const [showTransactModal, setShowTransactModal] = useState(false);
+   const [transactType, setTransactType] = useState<'deposit' | 'withdraw'>('deposit');
+   const [transactAmount, setTransactAmount] = useState<string>('');
+   const [transactLoading, setTransactLoading] = useState(false);
 
-   // Fetch bookings for logged in user
+   // Fetch bookings & transactions
    useEffect(() => {
-     const fetchBookings = async () => {
+     const fetchData = async () => {
         setLoading(true);
-        const { data, error } = await supabase
+        // Bookings
+        const { data: bData } = await supabase
             .from('bookings')
             .select('*')
             .eq('userId', user.userId)
             .order('createdAt', { ascending: false });
-            
-        if (data && !error) {
-            setBookings(data as Booking[]);
-        }
+        if (bData) setBookings(bData as Booking[]);
+
+        // Transactions (Requires the new table)
+        const { data: tData } = await supabase
+            .from('wallet_transactions')
+            .select('*')
+            .eq('userId', user.userId)
+            .order('createdAt', { ascending: false });
+        if (tData) setTransactions(tData as WalletTransaction[]);
+        
         setLoading(false);
      };
-     fetchBookings();
-   }, [user.userId]);
+     fetchData();
+   }, [user.userId, user.walletBalance]); // Refresh when balance changes
+
+   const handleTransaction = async () => {
+       setTransactLoading(true);
+       try {
+           const amount = parseFloat(transactAmount);
+           if (isNaN(amount)) throw new Error("Invalid amount");
+           
+           if (transactType === 'deposit' && amount < 100) throw new Error("Minimum deposit is 100 RWF");
+           if (transactType === 'withdraw' && amount < 500) throw new Error("Minimum withdrawal is 500 RWF");
+           if (transactType === 'withdraw' && amount > (user.walletBalance || 0)) throw new Error("Insufficient funds");
+
+           // Call the Supabase RPC function (secure server-side logic)
+           const { data, error } = await supabase.rpc('handle_wallet_transaction', {
+               p_user_id: user.userId,
+               p_amount: amount,
+               p_type: transactType === 'deposit' ? 'deposit' : 'withdrawal',
+               p_method: 'momo' // Default for now
+           });
+
+           if (error) throw error;
+           
+           alert(`${transactType === 'deposit' ? 'Deposit' : 'Withdrawal'} successful!`);
+           setShowTransactModal(false);
+           setTransactAmount('');
+           refreshData(); // Updates global user state (balance)
+       } catch (err: any) {
+           alert(err.message);
+       } finally {
+           setTransactLoading(false);
+       }
+   };
 
    // Use only real routes
    const allRoutes = routes;
    
    return (
-      <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
-         <div className="flex items-center justify-between border-b border-white/5 pb-6">
+      <div className="space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto relative">
+         <div className="flex flex-col md:flex-row items-center justify-between border-b border-white/5 pb-6 gap-6">
             <div>
                <h1 className="text-3xl font-display font-bold mb-2">My Wallet</h1>
-               <p className="text-gray-400">Your digital tickets and travel history.</p>
+               <p className="text-gray-400">Digital tickets, balance, and history.</p>
             </div>
-            <div className="text-right hidden md:block">
-               <p className="text-sm text-gray-400">Available Balance</p>
-               <p className="text-2xl font-bold text-primary">{formatRWF(0)}</p>
+            
+            {/* Balance Card */}
+            <div className="bg-surfaceHighlight border border-white/10 p-6 rounded-2xl w-full md:w-auto min-w-[280px]">
+               <p className="text-sm text-gray-400 mb-1 uppercase font-bold tracking-wider">Available Balance</p>
+               <div className="flex items-center justify-between mb-4">
+                   <p className="text-3xl font-display font-bold text-primary">{formatRWF(user.walletBalance || 0)}</p>
+                   <Wallet className="text-primary/50" />
+               </div>
+               <div className="flex gap-2">
+                   <Button size="sm" className="flex-1 text-xs" onClick={() => { setTransactType('deposit'); setShowTransactModal(true); }}>
+                       <ArrowDownLeft size={14} className="mr-1"/> Deposit
+                   </Button>
+                   <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => { setTransactType('withdraw'); setShowTransactModal(true); }}>
+                       <ArrowUpRight size={14} className="mr-1"/> Withdraw
+                   </Button>
+               </div>
             </div>
+         </div>
+
+         {/* Transaction Modal */}
+         {showTransactModal && (
+             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                 <div className="w-full max-w-sm glass-panel-heavy p-8 rounded-3xl relative border border-white/10">
+                     <button onClick={() => setShowTransactModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X/></button>
+                     <h2 className="text-xl font-bold mb-1 capitalize">{transactType} Funds</h2>
+                     <p className="text-xs text-gray-400 mb-6">
+                         {transactType === 'deposit' ? 'Min: 100 RWF' : 'Min: 500 RWF'}
+                     </p>
+                     
+                     <div className="space-y-4">
+                         <div className="space-y-2">
+                             <label className="text-xs text-gray-400 font-bold ml-1">Amount (RWF)</label>
+                             <input 
+                                type="number"
+                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white text-lg font-bold focus:border-primary focus:outline-none"
+                                placeholder="0"
+                                value={transactAmount}
+                                onChange={(e) => setTransactAmount(e.target.value)}
+                             />
+                         </div>
+                         <Button className="w-full" onClick={handleTransaction} isLoading={transactLoading}>
+                             Confirm {transactType}
+                         </Button>
+                     </div>
+                 </div>
+             </div>
+         )}
+
+         {/* View Tabs */}
+         <div className="flex gap-4 border-b border-white/5">
+             <button 
+                onClick={() => setViewMode('tickets')}
+                className={`pb-3 text-sm font-bold transition-colors border-b-2 ${viewMode === 'tickets' ? 'text-white border-primary' : 'text-gray-500 border-transparent hover:text-white'}`}
+             >
+                 Active Tickets
+             </button>
+             <button 
+                onClick={() => setViewMode('transactions')}
+                className={`pb-3 text-sm font-bold transition-colors border-b-2 ${viewMode === 'transactions' ? 'text-white border-primary' : 'text-gray-500 border-transparent hover:text-white'}`}
+             >
+                 Transaction History
+             </button>
          </div>
 
          {loading ? (
              <div className="text-center py-20 text-gray-500 animate-pulse">
                 <p>Syncing wallet...</p>
+             </div>
+         ) : viewMode === 'transactions' ? (
+             <div className="space-y-4">
+                 {transactions.length === 0 ? (
+                     <div className="text-center py-20 text-gray-500">No transactions found.</div>
+                 ) : transactions.map(tx => (
+                     <div key={tx.transactionId} className="glass-panel p-4 rounded-xl flex items-center justify-between">
+                         <div className="flex items-center gap-4">
+                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                 tx.type === 'deposit' ? 'bg-green-500/10 text-green-500' : 
+                                 tx.type === 'withdrawal' ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'
+                             }`}>
+                                 {tx.type === 'deposit' ? <ArrowDownLeft size={20}/> : <ArrowUpRight size={20}/>}
+                             </div>
+                             <div>
+                                 <p className="font-bold text-white capitalize">{tx.type}</p>
+                                 <p className="text-xs text-gray-400">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                             </div>
+                         </div>
+                         <p className={`font-mono font-bold ${tx.type === 'deposit' ? 'text-green-400' : 'text-white'}`}>
+                             {tx.type === 'deposit' ? '+' : '-'}{formatRWF(tx.amount)}
+                         </p>
+                     </div>
+                 ))}
              </div>
          ) : (
              <div className="space-y-6">
@@ -1027,14 +1088,14 @@ const WalletView = ({ user, buses, routes }: { user: User, buses: BusType[], rou
 };
 
 // 7. Search & Booking 
-const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingComplete: (booking: Booking) => void, cities: string[], user: User, routes: Route[], buses: BusType[] }) => {
+const Home = ({ onBookingComplete, cities, user, routes, buses, refreshData }: { onBookingComplete: (booking: Booking) => void, cities: string[], user: User, routes: Route[], buses: BusType[], refreshData: () => void }) => {
   const [step, setStep] = useState<'search' | 'results' | 'seats' | 'payment'>('search');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [searchResults, setSearchResults] = useState<Route[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'airtel'>('momo');
+  const [paymentMethod, setPaymentMethod] = useState<'momo' | 'airtel' | 'wallet'>('momo');
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Filter routes based on available database entries
@@ -1057,6 +1118,22 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
     setIsProcessing(true);
     
     try {
+        if (paymentMethod === 'wallet') {
+            if ((user.walletBalance || 0) < selectedRoute.price) {
+                throw new Error("Insufficient wallet balance. Please deposit funds in your Wallet.");
+            }
+            
+            // Deduct from wallet first (Serious Mode)
+            const { error: txError } = await supabase.rpc('handle_wallet_transaction', {
+               p_user_id: user.userId,
+               p_amount: selectedRoute.price,
+               p_type: 'payment',
+               p_method: 'system'
+           });
+           if (txError) throw txError;
+           await refreshData();
+        }
+
         const qrString = `INZIRA-${selectedRoute.busId}-${selectedRoute.routeId}-${selectedSeat}-${Date.now()}`;
         
         const newBookingPayload = {
@@ -1085,9 +1162,9 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
             setStep('search'); 
         }, 1500);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Booking Error", error);
-        alert("Booking failed. Please try again.");
+        alert(error.message || "Booking failed. Please try again.");
         setIsProcessing(false);
     }
   };
@@ -1292,6 +1369,21 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
 
               <div className="glass-panel p-6 rounded-3xl space-y-6">
                   <div className="space-y-4">
+                      {/* Wallet Option */}
+                      <div 
+                        onClick={() => setPaymentMethod('wallet')}
+                        className={`p-4 rounded-2xl border cursor-pointer flex items-center justify-between transition-all ${paymentMethod === 'wallet' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-black font-bold"><Wallet size={18}/></div>
+                              <div>
+                                  <span className="font-bold block">Inzira Wallet</span>
+                                  <span className="text-xs opacity-70">Balance: {formatRWF(user.walletBalance || 0)}</span>
+                              </div>
+                          </div>
+                          {paymentMethod === 'wallet' && <div className="w-4 h-4 rounded-full bg-primary"></div>}
+                      </div>
+
                       <div 
                         onClick={() => setPaymentMethod('momo')}
                         className={`p-4 rounded-2xl border cursor-pointer flex items-center justify-between transition-all ${paymentMethod === 'momo' ? 'bg-accent/10 border-accent text-accent' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
@@ -1315,9 +1407,11 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
                       </div>
                   </div>
 
-                  <div className="pt-4 border-t border-white/5">
-                      <Input label="Phone Number" placeholder="078..." icon={<span className="text-xs font-bold">RW</span>} />
-                  </div>
+                  {paymentMethod !== 'wallet' && (
+                      <div className="pt-4 border-t border-white/5">
+                          <Input label="Phone Number" placeholder="078..." icon={<span className="text-xs font-bold">RW</span>} />
+                      </div>
+                  )}
 
                   <Button className="w-full h-14 text-lg" onClick={handlePayment} isLoading={isProcessing}>
                       Pay {formatRWF(selectedRoute.price)}
@@ -1334,7 +1428,7 @@ const Home = ({ onBookingComplete, cities, user, routes, buses }: { onBookingCom
   return null;
 };
 
-// 8. Auth Screen
+// 8. Auth Screen (No changes needed for this block, using previous implementation)
 const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
   const [activeTab, setActiveTab] = useState<'passenger' | 'company' | 'admin'>('passenger');
   const [isLogin, setIsLogin] = useState(true);
@@ -1362,7 +1456,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
         // Check Role
         const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('role')
+            .select('*')
             .eq('userId', data.user.id)
             .single();
 
@@ -1375,11 +1469,18 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
         if (activeTab === 'company' && userData.role !== 'companyAdmin') {
             throw new Error("Access Denied: Please use the Passenger portal or contact support.");
         }
-        if (activeTab === 'passenger' && userData.role !== 'passenger') {
-             // Optional: Allow admins to login as passenger, but usually separate is better
-        }
+        
+        const appUser: User = {
+            userId: userData.userId,
+            email: userData.email,
+            fullName: userData.fullName,
+            role: userData.role,
+            phone: userData.phone,
+            companyId: userData.companyId,
+            walletBalance: userData.walletBalance || 0
+        };
 
-        if (data.user) onLogin(data.user);
+        if (data.user) onLogin(appUser);
 
       } else {
         // SIGN UP FLOW (Passenger Only)
@@ -1397,15 +1498,26 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
                  email: data.user.email,
                  fullName: fullName,
                  role: 'passenger',
-                 phone: phone
+                 phone: phone,
+                 walletBalance: 0
              });
              if (dbError) throw dbError;
-             onLogin(data.user);
+             
+             // Auto login user object
+             const appUser: User = {
+                userId: data.user.id,
+                email: data.user.email || '',
+                fullName: fullName,
+                role: 'passenger',
+                phone: phone,
+                walletBalance: 0
+             };
+             onLogin(appUser);
         }
       }
     } catch (err: any) {
       setError(err.message);
-      await supabase.auth.signOut(); // Ensure clean state on error
+      await supabase.auth.signOut(); 
     } finally {
       setLoading(false);
     }
@@ -1538,7 +1650,7 @@ const AuthScreen = ({ onLogin }: { onLogin: (user: any) => void }) => {
   );
 };
 
-// 9. Scanner View
+// 9. Scanner View (Same as before)
 const ScannerView = ({ onScan }: { onScan: (data: string | null) => void }) => {
     const [scanResult, setScanResult] = useState<string | null>(null);
 
@@ -1672,6 +1784,15 @@ const App: React.FC = () => {
   }, []);
 
   const handleLogin = async (user: any) => {
+    // If we passed the full appUser object from AuthScreen, use it
+    if ((user as User).role) {
+        setCurrentUser(user as User);
+        if (user.role === 'companyAdmin') setActiveView('mission-control');
+        else if (user.role === 'systemAdmin') setActiveView('system-dashboard');
+        return;
+    }
+
+    // Otherwise fetch from DB (session restore)
     const { data } = await supabase.from('users').select('*').eq('userId', user.id).single();
     if (data) {
         const appUser: User = {
@@ -1680,12 +1801,11 @@ const App: React.FC = () => {
             fullName: data.fullName,
             role: data.role,
             phone: data.phone,
-            companyId: data.companyId
+            companyId: data.companyId,
+            walletBalance: data.walletBalance || 0
         };
         setCurrentUser(appUser);
         
-        // Only redirect if still on search/login default view to avoid jarring shifts
-        // But enforce dashboard for admin roles
         if (data.role === 'companyAdmin') setActiveView('mission-control');
         else if (data.role === 'systemAdmin') setActiveView('system-dashboard');
         else if (activeView === 'search') setActiveView('search');
@@ -1701,6 +1821,7 @@ const App: React.FC = () => {
 
   const handleBookingComplete = (newBooking: Booking) => {
       showNotification('Booking Confirmed! Ticket added to wallet.', 'success');
+      refreshData(); // Refresh to update wallet balance if used
       setActiveView('my-bookings');
   };
 
@@ -1749,8 +1870,8 @@ const App: React.FC = () => {
 
         {/* Content Container */}
         <div className="max-w-7xl mx-auto p-4 md:p-8 lg:p-12">
-           {activeView === 'search' && <Home onBookingComplete={handleBookingComplete} cities={CITIES} user={currentUser} routes={routes} buses={buses} />}
-           {activeView === 'my-bookings' && <WalletView user={currentUser} buses={buses} routes={routes} />}
+           {activeView === 'search' && <Home onBookingComplete={handleBookingComplete} cities={CITIES} user={currentUser} routes={routes} buses={buses} refreshData={refreshData} />}
+           {activeView === 'my-bookings' && <WalletView user={currentUser} buses={buses} routes={routes} refreshData={refreshData} />}
            
            {activeView === 'mission-control' && <MissionControl buses={buses} staff={staff} maintenance={maintenance} bookings={bookings} />}
            {activeView === 'fleet' && <FleetView buses={buses} companyId={currentUser.companyId || 'c1'} refreshData={refreshData} />}

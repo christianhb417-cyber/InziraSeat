@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'passenger' | 'companyAdmin' | 'systemAdmin';
 
 export interface User {
@@ -9,12 +10,15 @@ export interface User {
   role: UserRole;
   companyId?: string; // If companyAdmin
   createdAt?: string;
+  walletBalance?: number; // New field
 }
 
 export interface Company {
   companyId: string;
   companyName: string; 
-  contact: string; 
+  contact?: string; 
+  contactEmail?: string;
+  contactPhone?: string;
   ownerUid?: string;
   status?: 'pending' | 'active' | 'suspended' | 'rejected';
 }
@@ -88,6 +92,17 @@ export interface Booking {
   totalPrice?: number;
 }
 
+export interface WalletTransaction {
+  transactionId: string;
+  userId: string;
+  type: 'deposit' | 'withdrawal' | 'payment' | 'refund';
+  amount: number;
+  method: string;
+  status: string;
+  createdAt: string;
+  reference?: string;
+}
+
 export interface Payment {
   paymentId: string;
   bookingId: string;
@@ -95,7 +110,7 @@ export interface Payment {
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
-  method: 'momo' | 'airtel' | 'card' | 'paypal';
+  method: 'momo' | 'airtel' | 'card' | 'paypal' | 'wallet';
   transactionId?: string;
   createdAt: string;
 }
